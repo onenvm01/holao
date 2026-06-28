@@ -5,7 +5,10 @@ import asyncio
 import re
 
 # ===== CONFIG =====
-TOKEN = "6128053650:AAEBgN3wueM1A_T9lFKnM_VmSrEpTBz3uuc"
+
+import os
+TOKEN = os.getenv("TOKEN")
+
 LOGIN_URL = "https://courses.ut.edu.vn/login/index.php"
 CALENDAR_URL = "https://courses.ut.edu.vn/calendar/view.php"
 
