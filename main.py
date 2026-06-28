@@ -3,16 +3,15 @@ from bs4 import BeautifulSoup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 import asyncio
 import re
+import os
+import sys
 
 # ===== CONFIG =====
-import os
-
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("TOKEN")  # ✅ dùng env (Railway)
 
 if not TOKEN:
     raise ValueError("❌ TOKEN chưa được set")
 
-app = ApplicationBuilder().token(TOKEN).build()
 LOGIN_URL = "https://courses.ut.edu.vn/login/index.php"
 CALENDAR_URL = "https://courses.ut.edu.vn/calendar/view.php"
 
@@ -23,7 +22,7 @@ user_data = {}
 async def start(update, context):
     await update.message.reply_text("✅ Bot OK\nGõ /login để nhập tài khoản")
 
-# ================= LOGIN =================
+# ================= LOGIN COMMAND =================
 async def login_command(update, context):
     user_id = update.effective_user.id
     user_state[user_id] = "WAIT_USERNAME"
@@ -64,50 +63,46 @@ def format_events(events):
     for e in events:
         text = e.get_text()
 
-        # ✅ lấy text sạch
         lines = [line.strip() for line in text.split("\n") if line.strip()]
 
-        title = lines[0] if len(lines) > 0 else "Không rõ"
+        # ✅ tìm title
+        title = "Không rõ"
+        for line in lines:
+            if "tới hạn" in line or "due" in line:
+                title = line
+                break
+        if title == "Không rõ" and lines:
+            title = lines[0]
 
-        # ✅ lấy thời gian
-        import re
+        # ✅ time
         match = re.search(r'(\d{1,2} .*?, \d{1,2}:\d{2})', text)
         time_str = match.group(1) if match else "Không rõ"
 
-        # ✅ lấy LINK + MÔN
+        # ✅ subject + link đúng
         subject = "Không rõ"
         link = "Không có link"
 
-        a_tag = e.find("a")
-
-# ✅ lấy LINK + MÔN đúng
         a_tags = e.find_all("a")
-
-        subject = "Không rõ"
-        link = "Không có link"
 
         for a in a_tags:
             text_a = a.get_text(strip=True)
-
             if "[" in text_a and "]" in text_a:
-                subject = text_a
+                subject = text_a.split("]")[-1].strip()
                 link = a.get("href")
                 break
 
-        subject = subject.split("]")[-1].strip()
-
-        # ✅ output
         result += f"📌 {count}. {title}\n"
         result += f"⏰ Hạn: {time_str}\n"
         result += f"📚 Môn: {subject}\n"
-        result += f"🔗 Link: {link}\n\n"
+        result += f"🔗 {link}\n\n"
 
         count += 1
 
     result += "━━━━━━━━━━━━━━━━━━"
 
     return result
-# ================= LOGIN + GET DATA =================
+
+# ================= LOGIN + GET CALENDAR =================
 def get_calendar(username, password):
     try:
         session = requests.Session()
@@ -118,12 +113,11 @@ def get_calendar(username, password):
 
         # ✅ lấy token
         r = session.get(LOGIN_URL, headers=headers)
-
         soup = BeautifulSoup(r.text, "html.parser")
 
         token_input = soup.find("input", {"name": "logintoken"})
         if not token_input:
-            return "❌ Không lấy được logintoken (web chặn hoặc thay đổi)"
+            return "❌ Không lấy được logintoken (bị chặn hoặc web đổi)"
 
         logintoken = token_input["value"]
 
@@ -139,14 +133,14 @@ def get_calendar(username, password):
         if "loginerrors" in r.text.lower():
             return "❌ Sai tài khoản hoặc mật khẩu"
 
-        # ✅ vào calendar
+        # ✅ calendar
         r = session.get(CALENDAR_URL, headers=headers)
         soup = BeautifulSoup(r.text, "html.parser")
 
         events = soup.find_all("div", class_="event")
 
         if not events:
-            return "❌ Không lấy được dữ liệu"
+            return "❌ Không lấy được deadline"
 
         return format_events(events)
 
@@ -155,10 +149,14 @@ def get_calendar(username, password):
 
 # ================= MAIN =================
 def main():
+
+    # ✅ fix Windows (KHÔNG ảnh hưởng Railway)
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-
     app.add_handler(CommandHandler("login", login_command))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_input))
 
@@ -168,3 +166,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+``
