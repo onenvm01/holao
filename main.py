@@ -5,10 +5,9 @@ import asyncio
 import re
 
 # ===== CONFIG =====
-
 import os
 TOKEN = os.getenv("TOKEN")
-
+app = ApplicationBuilder().token(TOKEN).build()
 LOGIN_URL = "https://courses.ut.edu.vn/login/index.php"
 CALENDAR_URL = "https://courses.ut.edu.vn/calendar/view.php"
 
