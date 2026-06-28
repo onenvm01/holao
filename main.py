@@ -107,40 +107,25 @@ def get_calendar(username, password):
     try:
         session = requests.Session()
 
-        
         headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "text/html",
-            "Referer": LOGIN_URL,
-            "Accept-Language": "vi-VN,vi;q=0.9"
+            "User-Agent": "Mozilla/5.0"
         }
 
+        # ✅ lấy cookie auto
+        cookie = get_cookie_auto(username, password)
 
-        # ✅ lấy token
-        r = session.get(LOGIN_URL, headers=headers)
-        soup = BeautifulSoup(r.text, "html.parser")
+        if not cookie:
+            return "❌ Không lấy được cookie"
 
-        token_input = soup.find("input", {"name": "logintoken"})
-        if not token_input:
-            print(r.text[:500])
-            return "❌ Không lấy được logintoken (bị chặn hoặc web đổi)"
+        session.cookies.update({
+            "MoodleSession": cookie
+        })
 
-        logintoken = token_input["value"]
-
-        # ✅ login
-        payload = {
-            "username": username,
-            "password": password,
-            "logintoken": logintoken
-        }
-
-        r = session.post(LOGIN_URL, data=payload, headers=headers)
-
-        if "loginerrors" in r.text.lower():
-            return "❌ Sai tài khoản hoặc mật khẩu"
-
-        # ✅ calendar
         r = session.get(CALENDAR_URL, headers=headers)
+
+        if "login" in r.url:
+            return "❌ Cookie hết hạn"
+
         soup = BeautifulSoup(r.text, "html.parser")
 
         events = soup.find_all("div", class_="event")
@@ -153,6 +138,37 @@ def get_calendar(username, password):
     except Exception as e:
         return f"❌ Lỗi: {str(e)}"
 
+from playwright.sync_api import sync_playwright
+
+def get_cookie_auto(username, password):
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+
+            # login
+            page.goto("https://courses.ut.edu.vn/login/index.php")
+
+            page.fill('input[name="username"]', username)
+            page.fill('input[name="password"]', password)
+
+            page.click('button[type="submit"]')
+
+            page.wait_for_load_state("networkidle")
+
+            # ✅ lấy cookie
+            cookies = page.context.cookies()
+
+            browser.close()
+
+            for c in cookies:
+                if c["name"] == "MoodleSession":
+                    return c["value"]
+
+        return None
+
+    except Exception as e:
+        return None
 # ================= MAIN =================
 def main():
 
