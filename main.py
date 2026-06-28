@@ -1,170 +1,89 @@
 import requests
 from bs4 import BeautifulSoup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
-import asyncio
-import re
+from telegram.ext import ApplicationBuilder, CommandHandler
 import os
-import sys
 
 # ===== CONFIG =====
-TOKEN = os.getenv("TOKEN")  # ✅ dùng env (Railway)
+TOKEN = os.getenv("TOKEN")
 
-if not TOKEN:
-    raise ValueError("❌ TOKEN chưa được set")
-
-LOGIN_URL = "https://courses.ut.edu.vn/login/index.php"
 CALENDAR_URL = "https://courses.ut.edu.vn/calendar/view.php"
 
-user_state = {}
-user_data = {}
+COOKIE = {
+    "MoodleSession": "DAN_COOKIE_CUA_BAN"
+}
 
-# ================= START =================
-async def start(update, context):
-    await update.message.reply_text("✅ Bot OK\nGõ /login để nhập tài khoản")
-
-# ================= LOGIN COMMAND =================
-async def login_command(update, context):
-    user_id = update.effective_user.id
-    user_state[user_id] = "WAIT_USERNAME"
-    await update.message.reply_text("👉 Nhập username:")
-
-# ================= HANDLE INPUT =================
-async def handle_input(update, context):
-    user_id = update.effective_user.id
-    text = update.message.text
-
-    if user_id not in user_state:
-        return
-
-    if user_state[user_id] == "WAIT_USERNAME":
-        user_data[user_id] = {"username": text}
-        user_state[user_id] = "WAIT_PASSWORD"
-        await update.message.reply_text("👉 Nhập password:")
-
-    elif user_state[user_id] == "WAIT_PASSWORD":
-        user_data[user_id]["password"] = text
-        user_state.pop(user_id)
-
-        await update.message.reply_text("⏳ Đang login và lấy lịch...")
-
-        result = get_calendar(
-            user_data[user_id]["username"],
-            user_data[user_id]["password"]
-        )
-
-        await update.message.reply_text(result[:4000])
-
-# ================= FORMAT =================
-def format_events(events):
-    result = "📅 DANH SÁCH DEADLINE\n\n━━━━━━━━━━━━━━━━━━\n\n"
-
-    count = 1
-
-    for e in events:
-        text = e.get_text()
-
-        lines = [line.strip() for line in text.split("\n") if line.strip()]
-
-        # ✅ tìm title
-        title = "Không rõ"
-        for line in lines:
-            if "tới hạn" in line or "due" in line:
-                title = line
-                break
-        if title == "Không rõ" and lines:
-            title = lines[0]
-
-        # ✅ time
-        match = re.search(r'(\d{1,2} .*?, \d{1,2}:\d{2})', text)
-        time_str = match.group(1) if match else "Không rõ"
-
-        # ✅ subject + link đúng
-        subject = "Không rõ"
-        link = "Không có link"
-
-        a_tags = e.find_all("a")
-
-        for a in a_tags:
-            text_a = a.get_text(strip=True)
-            if "[" in text_a and "]" in text_a:
-                subject = text_a.split("]")[-1].strip()
-                link = a.get("href")
-                break
-
-        result += f"📌 {count}. {title}\n"
-        result += f"⏰ Hạn: {time_str}\n"
-        result += f"📚 Môn: {subject}\n"
-        result += f"🔗 {link}\n\n"
-
-        count += 1
-
-    result += "━━━━━━━━━━━━━━━━━━"
-
-    return result
-
-# ================= LOGIN + GET CALENDAR =================
-def get_calendar(username, password):
+# ================= CHECK STATUS =================
+def check_status():
     try:
         session = requests.Session()
+        headers = {"User-Agent": "Mozilla/5.0"}
 
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Referer": LOGIN_URL
-        }
+        session.cookies.update(COOKIE)
 
-        # ✅ GET login page
-        r = session.get(LOGIN_URL, headers=headers)
+        r = session.get(CALENDAR_URL, headers=headers, timeout=10)
 
-        soup = BeautifulSoup(r.text, "html.parser")
+        if r.status_code != 200:
+            return f"❌ Web lỗi: {r.status_code}"
 
-        token_input = soup.find("input", {"name": "logintoken"})
+        if "login" in r.url.lower():
+            return "❌ Cookie hết hạn"
 
-        if not token_input:
-            return "❌ Không lấy được logintoken (web chặn hoặc thay đổi)"
-
-        logintoken = token_input["value"]
-
-        # ✅ POST login
-        payload = {
-            "username": username,
-            "password": password,
-            "logintoken": logintoken
-        }
-
-        r = session.post(LOGIN_URL, data=payload, headers=headers)
-
-        # ✅ CHECK LOGIN THẬT
-        if "loginerrors" in r.text.lower() or "login" in r.url:
-            return "❌ Login thất bại"
-
-        # ✅ vào calendar
-        r = session.get(CALENDAR_URL, headers=headers)
-
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        events = soup.find_all("div", class_="event")
-
-        if not events:
-            return "❌ Login OK nhưng không thấy dữ liệu"
-
-        return format_events(events)
+        return "✅ Web OK (cookie hoạt động)"
 
     except Exception as e:
         return f"❌ Lỗi: {str(e)}"
+
+# ================= GET CALENDAR =================
+def get_calendar():
+    try:
+        session = requests.Session()
+        headers = {"User-Agent": "Mozilla/5.0"}
+
+        session.cookies.update(COOKIE)
+
+        r = session.get(CALENDAR_URL, headers=headers)
+
+        if "login" in r.url.lower():
+            return "❌ Cookie hết hạn"
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        events = soup.find_all("div", class_="event")
+
+        if not events:
+            return "❌ Không lấy được dữ liệu"
+
+        result = "📅 DEADLINE:\n\n"
+
+        for e in events[:5]:  # ✅ lấy 5 cái cho gọn test
+            text = e.get_text(strip=True)
+            result += f"• {text}\n\n"
+
+        return result
+
+    except Exception as e:
+        return f"❌ Lỗi: {str(e)}"
+
+# ================= COMMAND =================
+async def start(update, context):
+    status = check_status()
+
+    await update.message.reply_text(f"✅ Bot chạy\n\n{status}")
+
+async def test(update, context):
+    await update.message.reply_text("⏳ Đang test...")
+
+    data = get_calendar()
+
+    await update.message.reply_text(data[:4000])
+
 # ================= MAIN =================
 def main():
-
-    # ✅ fix Windows (KHÔNG ảnh hưởng Railway)
-    if sys.platform.startswith("win"):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("login", login_command))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_input))
+    app.add_handler(CommandHandler("test", test))
 
-    print("✅ Bot đang chạy...")
+    print("✅ BOT TEST RUNNING")
 
     app.run_polling()
 
