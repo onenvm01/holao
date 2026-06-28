@@ -117,8 +117,6 @@ def get_calendar(username, password):
         soup = BeautifulSoup(r.text, "html.parser")
 
         token_input = soup.find("input", {"name": "logintoken"})
-        if not token_input:
-            return "❌ Không lấy được token"
 
         logintoken = token_input["value"]
 
