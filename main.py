@@ -107,9 +107,14 @@ def get_calendar(username, password):
     try:
         session = requests.Session()
 
+        
         headers = {
-            "User-Agent": "Mozilla/5.0"
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/html",
+            "Referer": LOGIN_URL,
+            "Accept-Language": "vi-VN,vi;q=0.9"
         }
+
 
         # ✅ lấy token
         r = session.get(LOGIN_URL, headers=headers)
