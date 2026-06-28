@@ -112,11 +112,18 @@ def get_calendar(username, password):
     try:
         session = requests.Session()
 
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
         # ✅ lấy token
-        r = session.get(LOGIN_URL)
+        r = session.get(LOGIN_URL, headers=headers)
+
         soup = BeautifulSoup(r.text, "html.parser")
 
         token_input = soup.find("input", {"name": "logintoken"})
+        if not token_input:
+            return "❌ Không lấy được logintoken (web chặn hoặc thay đổi)"
 
         logintoken = token_input["value"]
 
@@ -127,19 +134,20 @@ def get_calendar(username, password):
             "logintoken": logintoken
         }
 
-        r = session.post(LOGIN_URL, data=payload)
+        r = session.post(LOGIN_URL, data=payload, headers=headers)
 
         if "loginerrors" in r.text.lower():
             return "❌ Sai tài khoản hoặc mật khẩu"
 
-        # ✅ lấy calendar
-        r = session.get(CALENDAR_URL)
+        # ✅ vào calendar
+        r = session.get(CALENDAR_URL, headers=headers)
         soup = BeautifulSoup(r.text, "html.parser")
 
         events = soup.find_all("div", class_="event")
 
         if not events:
             return "❌ Không lấy được dữ liệu"
+
         return format_events(events)
 
     except Exception as e:
