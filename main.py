@@ -117,6 +117,7 @@ def get_calendar(username, password):
 
         token_input = soup.find("input", {"name": "logintoken"})
         if not token_input:
+            print(r.text[:500])
             return "❌ Không lấy được logintoken (bị chặn hoặc web đổi)"
 
         logintoken = token_input["value"]
