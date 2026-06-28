@@ -134,7 +134,7 @@ def get_calendar(username, password):
         events = soup.find_all("div", class_="event")
 
         if not events:
-            return ("❌ Không lấy được dữ liệu")
+            return "❌ Không lấy được dữ liệu"
         return format_events(events)
 
     except Exception as e:
