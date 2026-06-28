@@ -142,11 +142,10 @@ def get_calendar(username, password):
 
 # ================= MAIN =================
 def main():
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+
     app.add_handler(CommandHandler("login", login_command))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_input))
 
